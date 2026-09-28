@@ -926,7 +926,7 @@ function initEvents() {
 ===================================================== */
 
 async function main() {
-  const expiryIso = "__EXPIRY_ISO__";
+  const expiryIso = "2030-12-31T23:59:59Z";
   const expiryTime = new Date(expiryIso).getTime();
   if (!Number.isFinite(expiryTime) || Date.now() >= expiryTime) {
     document.getElementById("expiredScreen").style.display = "flex";
