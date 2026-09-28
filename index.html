@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>납세자 지도</title>
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  >
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* =========================
+        상단 필터
+    ========================= */
+
+    #topbar {
+      flex-shrink: 0;
+      padding: 10px 14px;
+      border-bottom: 1px solid #d1d5db;
+      background: #fff;
+      z-index: 1000;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .muted {
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 9px;
+    }
+
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    label {
+      font-size: 12px;
+      color: #374151;
+      white-space: nowrap;
+    }
+
+    select,
+    input[type="number"] {
+      padding: 5px 7px;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      background: white;
+      font-size: 13px;
+    }
+
+    button {
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      background: white;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #f3f4f6;
+    }
+
+    #count {
+      margin-left: auto;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    /* =========================
+        담당자 범례
+    ========================= */
+
+    #managerLegend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 9px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.2);
+      flex-shrink: 0;
+    }
+
+    /* =========================
+        지도
+    ========================= */
+
+    #map {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      background: #f3f4f6;
+    }
+
+    /* =========================
+        납세자 라벨
+    ========================= */
+
+    .tax-label {
+      background: rgba(255,255,255,0.96);
+      border: 1px solid #d1d5db;
+      color: #111827;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: none;
+    }
+
+    .tax-label::before {
+      display: none;
+    }
+
+    /* =========================
+        납세자 팝업
+    ========================= */
+
+    .tax-popup {
+      min-width: 250px;
+      max-width: 340px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    .tax-popup-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #d1d5db;
+    }
+
+    .tax-person {
+      padding: 10px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .tax-person:last-child {
+      border-bottom: none;
+    }
+
+    .tax-person-name {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .tax-person-info {
+      font-size: 12px;
+      line-height: 1.7;
+      color: #374151;
+      overflow-wrap: anywhere;
+    }
+
+    .manager-tag {
+      display: inline-block;
+      color: white;
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+    }
+
+    /* 비고 입력 영역 스타일 */
+    .memo-box {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #d1d5db;
+    }
+    .memo-box textarea {
+      width: 100%;
+      height: 50px;
+      padding: 5px;
+      font-size: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      resize: vertical;
+      margin-bottom: 4px;
+    }
+    .memo-box button {
+      padding: 3px 8px;
+      font-size: 11px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .memo-box button:hover {
+      background: #1d4ed8;
+    }
+    .memo-status {
+      font-size: 11px;
+      color: #16a34a;
+      margin-left: 5px;
+    }
+
+    /* =========================
+        지하철역 이름
+        원형 마커 없음
+    ========================= */
+
+    .subway-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+
+      pointer-events: none;
+
+      text-shadow:
+        -1px -1px 2px #fff,
+         1px -1px 2px #fff,
+        -1px  1px 2px #fff,
+         1px  1px 2px #fff,
+         0 0 4px #fff;
+    }
+
+    .subway-label::before {
+      display: none !important;
+    }
+
+    .subway-label span {
+      display: inline-block;
+      margin-right: 3px;
+    }
+
+    /* =========================
+        모바일
+    ========================= */
+
+    @media (max-width: 700px) {
+      #topbar {
+        padding: 8px 10px;
+      }
+
+      .title {
+        font-size: 15px;
+      }
+
+      .title-row {
+        flex-wrap: wrap;
+      }
+
+      .row {
+        gap: 8px;
+      }
+
+      .control {
+        gap: 4px;
+      }
+
+      select {
+        max-width: 140px;
+      }
+
+      #count {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      #managerLegend {
+        gap: 7px;
+      }
+
+      .legend-item {
+        font-size: 11px;
+      }
+
+      .subway-label {
+        font-size: 11px;
+      }
+    }
+
+    #expiredScreen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #f3f4f6;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    #expiredScreen .expired-card {
+      max-width: 480px;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 14px;
+      padding: 32px 28px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+    }
+    #expiredScreen h1 { font-size: 22px; margin: 0 0 12px; color: #111827; }
+    #expiredScreen p { margin: 0; color: #4b5563; line-height: 1.7; }
+  </style>
+</head>
+
+<body>
+
+<!-- =========================
+     상단 UI
+========================= -->
+
+<div id="topbar">
+
+  <div class="title-row">
+    <span class="title">납세자 지도</span>
+  </div>
+
+  <div class="row">
+
+    <div class="control">
+      <label for="managerFilter">담당</label>
+      <select id="managerFilter">
+        <option value="__ALL__">전체</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label for="dateFilter">배분일자</label>
+      <select id="dateFilter">
+        <option value="__ALL__">전체</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label>
+        <input type="checkbox" id="labelToggle">
+        납세자명 표시
+      </label>
+    </div>
+
+    <div class="control">
+      <label for="labelMinZoom">납세자 라벨 줌</label>
+      <input
+        id="labelMinZoom"
+        type="number"
+        min="5"
+        max="19"
+        value="15"
+        style="width:58px"
+      >
+    </div>
+
+
+    <button id="resetBtn">초기화</button>
+
+    <div id="count"></div>
+
+  </div>
+
+  <div id="managerLegend"></div>
+
+</div>
+
+<!-- 만료 안내 화면 -->
+<div id="expiredScreen">
+  <div class="expired-card">
+    <h1>웹페이지가 만료되었습니다</h1>
+    <p>해당 납세자 지도의 이용 기간이 종료되었습니다.<br>담당자에게 문의하시기 바랍니다.</p>
+  </div>
+</div>
+
+<!-- 지도 -->
+<div id="map"></div>
+
+
+<!-- =========================
+     Leaflet
+========================= -->
+
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""
+></script>
+
+
+<script type="application/json" id="embeddedTaxpayerData"></script>
+
+<script>
+
+/* =====================================================
+    1. 전역 변수
+===================================================== */
+
+let map;
+let allPoints = [];
+let layerGroup;
+let subwayLayer;
+let markers = [];
+let currentGroupMap = new Map();
+let managerColors = new Map();
+let subwayStations = [];
+
+// ★ 여기에 아까 구글 시트 배포 후 받으신 웹 앱 URL을 넣어주세요!
+const GOOGLE_APP_URL = "https://script.google.com/macros/s/AKfycbyLnfp7QzOwKWxrajeOsWIIEAkRac1JVgm1OoNpR5QvxHSjMjybfUv8wIpCCFnnkkd4/exec"; 
+const SECRET_TOKEN = "scsemu";
+
+
+/* =====================================================
+    2. 담당자별 색상
+===================================================== */
+
+const COLOR_PALETTE = [
+  "#2563eb", "#dc2626", "#16a34a", "#9333ea",
+  "#ea580c", "#0891b2", "#be185d", "#4d7c0f",
+  "#7c3aed", "#0f766e", "#b45309", "#475569",
+  "#c026d3", "#65a30d", "#0369a1", "#9f1239"
+];
+
+
+/* =====================================================
+    4. HTML 이스케이프
+===================================================== */
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+
+/* =====================================================
+    5. 공통 유틸리티
+===================================================== */
+
+function uniqueSorted(arr) {
+  return Array.from(new Set(arr))
+    .sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+function groupKeyByCoord(p) {
+  const lat = Number(p.lat);
+  const lng = Number(p.lng);
+  return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
+}
+
+
+/* =====================================================
+    6. 담당자 색상 생성
+===================================================== */
+
+function buildManagerColors(points) {
+  const managers = uniqueSorted(
+    points
+      .map(p => (p.manager || "").trim())
+      .filter(Boolean)
+  );
+
+  managerColors.clear();
+  managers.forEach((manager, index) => {
+    managerColors.set(
+      manager,
+      COLOR_PALETTE[index % COLOR_PALETTE.length]
+    );
+  });
+}
+
+function getManagerColor(manager) {
+  const name = (manager || "").trim();
+  if (!name) return "#6b7280";
+  return managerColors.get(name) || "#6b7280";
+}
+
+
+/* =====================================================
+    7. 담당자 범례
+===================================================== */
+
+function buildManagerLegend() {
+  const legend = document.getElementById("managerLegend");
+  legend.innerHTML = "";
+
+  for (const manager of managerColors.keys()) {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+
+    const dot = document.createElement("span");
+    dot.className = "legend-dot";
+    dot.style.backgroundColor = getManagerColor(manager);
+
+    const text = document.createElement("span");
+    text.textContent = manager;
+
+    item.appendChild(dot);
+    item.appendChild(text);
+    legend.appendChild(item);
+  }
+}
+
+
+/* =====================================================
+    8. 필터 생성
+===================================================== */
+
+function buildFilters(points) {
+  const managerSelect = document.getElementById("managerFilter");
+  const dateSelect = document.getElementById("dateFilter");
+
+  const managers = uniqueSorted(
+    points.map(p => (p.manager || "").trim()).filter(Boolean)
+  );
+
+  const dates = uniqueSorted(
+    points.map(p => (p.allocDate || "").trim()).filter(Boolean)
+  );
+
+  managerSelect.innerHTML = '<option value="__ALL__">전체</option>';
+  for (const manager of managers) {
+    managerSelect.appendChild(new Option(manager, manager));
+  }
+
+  dateSelect.innerHTML = '<option value="__ALL__">전체</option>';
+  for (const date of dates) {
+    dateSelect.appendChild(new Option(date, date));
+  }
+}
+
+
+/* =====================================================
+    9. 필터링
+===================================================== */
+
+function getFilteredPoints() {
+  const managerValue = document.getElementById("managerFilter").value;
+  const dateValue = document.getElementById("dateFilter").value;
+
+  return allPoints.filter(p => {
+    const manager = (p.manager || "").trim();
+    const allocDate = (p.allocDate || "").trim();
+
+    if (managerValue !== "__ALL__" && manager !== managerValue) return false;
+    if (dateValue !== "__ALL__" && allocDate !== dateValue) return false;
+    return true;
+  });
+}
+
+
+/* =====================================================
+    10. 동일 좌표 그룹 생성
+===================================================== */
+
+function computeGroupsFor(points) {
+  const gmap = new Map();
+
+  for (const p of points) {
+    const key = groupKeyByCoord(p);
+    if (!gmap.has(key)) {
+      gmap.set(key, {
+        key,
+        lat: Number(p.lat),
+        lng: Number(p.lng),
+        people: []
+      });
+    }
+    gmap.get(key).people.push(p);
+  }
+  currentGroupMap = gmap;
+}
+
+
+/* =====================================================
+    11. 동일 좌표 팝업 (비고 입력 기능 포함)
+===================================================== */
+
+function buildGroupPopup(group) {
+  const people = group.people;
+
+  const header = `
+    <div class="tax-popup-title">
+      동일 좌표 납세자 ${people.length}건
+    </div>
+  `;
+
+  const body = people.map((p, index) => {
+    const title = escapeHtml(p.title || "이름 없음");
+    const manager = escapeHtml(p.manager || "-");
+    const date = escapeHtml(p.allocDate || "-");
+    const address = escapeHtml(p.fullAddress || "-");
+    const color = getManagerColor(p.manager);
+
+    // 로컬 스토리지에서 저장된 메모 불러오기 (없으면 구글 시트 원본 memo 사용)
+    const storageKey = `memo_${p.manager}_${p.title}`;
+    const savedMemo = localStorage.getItem(storageKey) !== null ? localStorage.getItem(storageKey) : (p.memo || "");
+
+    return `
+      <div class="tax-person" data-manager="${escapeHtml(p.manager)}" data-title="${escapeHtml(p.title)}" data-date="${escapeHtml(p.allocDate)}" data-address="${escapeHtml(p.fullAddress)}">
+        <div class="tax-person-name">
+          ${index + 1}. ${title}
+        </div>
+
+        <span class="manager-tag" style="background-color:${color}">
+          ${manager}
+        </span>
+
+        <div class="tax-person-info">
+          <div>배분일자: ${date}</div>
+          <div>주소: ${address}</div>
+        </div>
+
+        <div class="memo-box">
+          <textarea class="person-memo-input" placeholder="비고 입력...">${escapeHtml(savedMemo)}</textarea>
+          <button type="button" class="save-memo-btn">저장</button>
+          <span class="memo-status"></span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="tax-popup">
+      ${header}
+      ${body}
+    </div>
+  `;
+}
+
+
+/* =====================================================
+    12. 납세자 마커 아이콘 및 이벤트 바인딩
+===================================================== */
+
+function createMarkerIcon(color, count) {
+  const html = `
+    <div style="
+      width:30px; height:30px; border-radius:50%; background:${color};
+      border:2px solid white; box-shadow:0 1px 5px rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      color:white; font-size:12px; font-weight:bold;
+    ">
+      ${count > 1 ? count : ""}
+    </div>
+  `;
+
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+}
+
+
+/* =====================================================
+    13. 납세자 라벨
+===================================================== */
+
+function labelTextFor(group) {
+  const people = group.people;
+  if (!people.length) return "";
+  const firstName = (people[0].title || "").trim();
+  if (!firstName) return "";
+  if (people.length > 1) {
+    return `${firstName} 외 ${people.length - 1}`;
+  }
+  return firstName;
+}
+
+function applyLabelVisibility() {
+  if (!map) return;
+  const showLabels = document.getElementById("labelToggle").checked;
+  const minZoom = Math.max(5, Math.min(19, Number(document.getElementById("labelMinZoom").value) || 15));
+  const zoom = map.getZoom();
+
+  for (const item of markers) {
+    const marker = item.marker;
+    const group = item.group;
+    const text = labelTextFor(group);
+    const shouldShow = showLabels && zoom >= minZoom && text !== "";
+
+    if (shouldShow && !marker.getTooltip()) {
+      marker.bindTooltip(escapeHtml(text), {
+        permanent: true,
+        direction: "top",
+        offset: [0, -15],
+        className: "tax-label",
+        opacity: 1
+      });
+      marker.openTooltip();
+    } else if (!shouldShow && marker.getTooltip()) {
+      marker.unbindTooltip();
+    }
+  }
+}
+
+
+/* =====================================================
+    14. 납세자 마커 렌더링
+===================================================== */
+
+function clearMarkers() {
+  layerGroup.clearLayers();
+  markers = [];
+}
+
+function addMarkers(points) {
+  const groups = Array.from(currentGroupMap.values());
+  const bounds = [];
+
+  for (const group of groups) {
+    const lat = group.lat;
+    const lng = group.lng;
+    bounds.push([lat, lng]);
+
+    const firstPerson = group.people[0];
+    const color = getManagerColor(firstPerson.manager);
+    const icon = createMarkerIcon(color, group.people.length);
+
+    const marker = L.marker([lat, lng], { icon }).addTo(layerGroup);
+
+    marker.bindPopup(buildGroupPopup(group), {
+      maxWidth: 360,
+      maxHeight: 450
+    });
+
+    markers.push({ marker, group });
+  }
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [25, 25], maxZoom: 16 });
+  } else {
+    map.setView([37.4835, 127.0322], 12);
+  }
+
+  document.getElementById("count").textContent =
+    `표시 ${points.length}건 / 전체 ${allPoints.length}건 (지도 마커 ${groups.length}개)`;
+
+  applyLabelVisibility();
+}
+
+
+/* =====================================================
+    팝업 내부 [저장] 버튼 이벤트 처리 (구글 시트 전송 + 로컬 저장)
+===================================================== */
+
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.classList.contains('save-memo-btn')) {
+    const personDiv = e.target.closest('.tax-person');
+    const textarea = personDiv.querySelector('.person-memo-input');
+    const statusSpan = personDiv.querySelector('.memo-status');
+
+    const manager = personDiv.getAttribute('data-manager');
+    const title = personDiv.getAttribute('data-title');
+    const allocDate = personDiv.getAttribute('data-date');
+    const fullAddress = personDiv.getAttribute('data-address');
+    const memo = textarea.value;
+
+    if (GOOGLE_APP_URL === "YOUR_WEB_APP_URL_HERE") {
+      alert("웹 앱 URL이 설정되지 않았습니다. 코드를 확인해주세요.");
+      return;
+    }
+
+    statusSpan.textContent = "저장 중...";
+
+    // 1. 브라우저 로컬 저장 (내 화면 실시간 유지)
+    const storageKey = `memo_${manager}_${title}`;
+    localStorage.setItem(storageKey, memo);
+
+    // 원본 데이터 객체 업데이트
+    const targetPoint = allPoints.find(p => p.manager === manager && p.title === title);
+    if (targetPoint) {
+      targetPoint.memo = memo;
+    }
+
+    // 2. 구글 시트로 전송
+    const payload = {
+      token: SECRET_TOKEN,
+      manager: manager,
+      title: title,
+      allocDate: allocDate,
+      fullAddress: fullAddress,
+      memo: memo
+    };
+
+    fetch(GOOGLE_APP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(() => {
+      statusSpan.textContent = "저장 완료!";
+      setTimeout(() => { statusSpan.textContent = ""; }, 2500);
+    })
+    .catch(err => {
+      console.error(err);
+      statusSpan.textContent = "실패";
+      statusSpan.style.color = "red";
+    });
+  }
+});
+
+
+/* =====================================================
+    18. URL 파라미터 필터
+===================================================== */
+
+function applyUrlFilters() {
+  const params = new URLSearchParams(location.search);
+  const presetManager = (params.get("manager") || "").trim();
+  const presetDate = (params.get("date") || "").trim();
+
+  const managerSelect = document.getElementById("managerFilter");
+  const dateSelect = document.getElementById("dateFilter");
+
+  if (presetManager) {
+    for (const opt of managerSelect.options) {
+      if (opt.value === presetManager) {
+        managerSelect.value = presetManager;
+        break;
+      }
+    }
+  }
+
+  if (presetDate) {
+    for (const opt of dateSelect.options) {
+      if (opt.value === presetDate) {
+        dateSelect.value = presetDate;
+        break;
+      }
+    }
+  }
+}
+
+
+/* =====================================================
+    19. 전체 렌더링
+===================================================== */
+
+function render() {
+  const filtered = getFilteredPoints();
+  computeGroupsFor(filtered);
+  clearMarkers();
+  addMarkers(filtered);
+}
+
+
+/* =====================================================
+    20. 이벤트 설정
+===================================================== */
+
+function initEvents() {
+  document.getElementById("managerFilter").addEventListener("change", render);
+  document.getElementById("dateFilter").addEventListener("change", render);
+  document.getElementById("labelToggle").addEventListener("change", applyLabelVisibility);
+  document.getElementById("labelMinZoom").addEventListener("change", applyLabelVisibility);
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    document.getElementById("managerFilter").value = "__ALL__";
+    document.getElementById("dateFilter").value = "__ALL__";
+    document.getElementById("labelToggle").checked = false;
+    document.getElementById("labelMinZoom").value = 15;
+    render();
+  });
+
+  map.on("zoomend", () => {
+    applyLabelVisibility();
+  });
+}
+
+
+/* =====================================================
+    21. 지도 초기 실행
+===================================================== */
+
+async function main() {
+  const expiryIso = "__EXPIRY_ISO__";
+  const expiryTime = new Date(expiryIso).getTime();
+  if (!Number.isFinite(expiryTime) || Date.now() >= expiryTime) {
+    document.getElementById("expiredScreen").style.display = "flex";
+    document.getElementById("topbar").style.display = "none";
+    document.getElementById("map").style.display = "none";
+    return;
+  }
+
+  try {
+    const embeddedData = document.getElementById("embeddedTaxpayerData");
+
+    if (embeddedData && embeddedData.textContent.trim()) {
+      allPoints = JSON.parse(embeddedData.textContent);
+    } else {
+      const res = await fetch("./points.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`points.json 읽기 실패: HTTP ${res.status}`);
+      allPoints = await res.json();
+    }
+
+    if (!Array.isArray(allPoints)) {
+      throw new Error("points.json 형식이 배열이 아닙니다.");
+    }
+
+    allPoints = allPoints.filter(p => {
+      const lat = Number(p.lat);
+      const lng = Number(p.lng);
+      return Number.isFinite(lat) && Number.isFinite(lng) && lat >= 33 && lat <= 39 && lng >= 124 && lng <= 132;
+    });
+
+    map = L.map("map");
+
+    const VWORLD_KEY = "1F05ACBD-AED8-4644-A199-196CD8B40E77";
+    L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/Base/{z}/{y}/{x}.png`, {
+      maxZoom: 19,
+      attribution: "&copy; VWorld"
+    }).addTo(map);
+
+    layerGroup = L.layerGroup().addTo(map);
+
+    buildManagerColors(allPoints);
+    buildManagerLegend();
+    buildFilters(allPoints);
+    applyUrlFilters();
+    initEvents();
+    render();
+
+  } catch (error) {
+    console.error(error);
+    document.getElementById("count").textContent = "데이터 로딩 실패: " + error.message;
+    alert("지도 데이터를 불러오지 못했습니다.\n\n" + error.message);
+  }
+}
+
+main();
+
+</script>
+
+</body>
+</html>
